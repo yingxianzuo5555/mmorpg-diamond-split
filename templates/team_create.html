@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block page_title %}創建新團隊{% endblock %}
+{% block content %}
+<div class="form-page">
+    <div class="form-card">
+        <div class="form-card-header">
+            <i class="fas fa-shield-halved"></i>
+            <h2>創建新團隊</h2>
+            <p>填寫以下資訊開始使用分鑽系統</p>
+        </div>
+        <form id="createTeamForm" class="form">
+            <div class="form-group">
+                <label><i class="fas fa-tag"></i> 團隊名稱 *</label>
+                <input type="text" name="name" required placeholder="例如: 奧丁血盟" class="form-input">
+            </div>
+            <div class="form-group">
+                <label><i class="fas fa-gamepad"></i> 遊戲名稱</label>
+                <select name="game_name" class="form-input">
+                    <option value="">請選擇遊戲</option>
+                    <option>天堂W</option>
+                    <option>天堂M</option>
+                    <option>天堂2M</option>
+                    <option>HIT2</option>
+                    <option>夜鴉 NIGHT CROWS</option>
+                    <option>ROM 王權之憶</option>
+                    <option>波拉西亞戰記</option>
+                    <option>權力之望</option>
+                    <option>RAVEN2：渡鴉</option>
+                    <option>洛汗2</option>
+                    <option>血之繼承者</option>
+                    <option>其他</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label><i class="fas fa-crown"></i> 第一管理員名稱 *</label>
+                <input type="text" name="leader_name" required placeholder="建議使用遊戲名稱" class="form-input">
+                <small class="form-hint">管理員擁有儲值及所有管理權限</small>
+            </div>
+            <div class="form-group">
+                <label><i class="fas fa-pencil"></i> 描述 (選填)</label>
+                <textarea name="description" class="form-input" rows="3" placeholder="團隊簡介..."></textarea>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    <i class="fas fa-check"></i> 創建團隊
+                </button>
+                <a href="{{ url_for('index') }}" class="btn btn-secondary">取消</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById('createTeamForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const data = Object.fromEntries(fd.entries());
+    try {
+        const r = await apiCall('/api/team/create', 'POST', data);
+        if (r.success) {
+            showToast('團隊創建成功！');
+            setTimeout(() => window.location.href = '/team/' + r.team_id, 1000);
+        }
+    } catch(err) {}
+});
+</script>
+{% endblock %}

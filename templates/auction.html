@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% block page_title %}拍賣系統{% endblock %}
+{% block page_actions %}
+<button class="btn btn-primary" onclick="showCreateAuction()">
+    <i class="fas fa-plus"></i> 發起拍賣
+</button>
+{% endblock %}
+{% block content %}
+<div class="auction-grid">
+    {% for a in auctions %}
+    <div class="auction-card card">
+        <div class="auction-status-badge status-{{ a.status }}">
+            {{ '進行中' if a.status == 'active' else '已結束' }}
+        </div>
+        <div class="card-body">
+            <h3><i class="fas fa-box"></i> {{ a.item_name }}</h3>
+            <div class="auction-details">
+                <div class="auction-detail">
+                    <small>數量</small>
+                    <strong>{{ a.item_quantity }}</strong>
+                </div>
+                <div class="auction-detail">
+                    <small>起標價</small>
+                    <strong>{{ a.starting_bid }}</strong>
+                </div>
+                <div class="auction-detail highlight">
+                    <small>當前出價</small>
+                    <strong class="text-primary">{{ a.current_bid }}</strong>
+                </div>
+                <div class="auction-detail">
+                    <small>最低加價</small>
+                    <strong>{{ a.min_increment }}</strong>
+                </div>
+            </div>
+            <div class="auction-meta">
+                <p><i class="fas fa-user"></i> 當前最高: {{ a.current_bidder_name or '無人出價' }}</p>
+                <p><i class="fas fa-flag"></i> 發起人: {{ a.creator_name or '-' }}</p>
+                {% if a.status == 'ended' %}
+                <p><i class="fas fa-crown"></i> 得標者: {{ a.winner_name or '-' }} | 成交價: {{ a.final_price }}</p>
+                {% endif %}
+            </div>
+            <div class="auction-actions">
+                {% if a.status == 'active' %}
+                <button class="btn btn-primary" onclick="placeBid({{ a.id }})">
+                    <i class="fas fa-gavel"></i> 出價
+                </button>
+                <button class="btn btn-danger" onclick="endAuction({{ a.id }})">
+                    <i class="fas fa-stop"></i> 結束
+                </button>
+                {% endif %}
+                <button class="btn btn-sm" onclick="viewBids({{ a.id }})">
+                    <i class="fas fa-list"></i> 出價記錄
+                </button>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="empty-state" style="grid-column: 1/-1">
+        <i class="fas fa-gavel fa-4x"></i>
+        <h3>還沒有拍賣</h3>
+        <p>發起拍賣來分配稀有物品！</p>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Create Auction Modal -->
+<div id="createAuctionModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-gavel"></i> 發起拍賣</h3>
+            <button class="modal-close" onclick="closeModal('createAuctionModal')">&times;</button>
+        </div>
+        <form id="createAuctionForm" class="form">
+            <div class="form-group">
+                <label>物品名稱 *</label>
+                <input type="text" name="item_name" required class="form-input" placeholder="例如: 傳說武器">
+            </div>
+            <div class="form-group">
+                <label>數量</label>
+                <input type="number" name="quantity" value="1" min="1" class="form-input">
+            </div>
+            <div class="form-group">
+                <label>起標價 (鑽石)</label>
+                <input type="number" name="starting_bid" value="0" min="0" class="form-input">
+            </div>
+            <div class="form-group">
+                <label>最低加價</label>
+                <input type="number" name="min_increment" value="100" min="1" class="form-input">
+            </div>
+            <div class="form-group">
+                <label>發起人</label>
+                <select name="created_by_id" class="form-input">
+                    {% for m in members %}
+                    <option value="{{ m.id }}">{{ m.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> 發起</button>
+        </form>
+    </div>
+</div>
+
+<!-- Bid Modal -->
+<div id="bidModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-gavel"></i> 出價</h3>
+            <button class="modal-close" onclick="closeModal('bidModal')">&times;</button>
+        </div>
+        <form id="bidForm" class="form">
+            <input type="hidden" id="bidAuctionId">
+            <div class="form-group">
+                <label>出價成員</label>
+                <select id="bidMemberId" class="form-input">
+                    {% for m in members %}
+                    <option value="{{ m.id }}">{{ m.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>出價金額</label>
+                <input type="number" id="bidAmount" required min="1" class="form-input" placeholder="輸入出價">
+            </div>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-gavel"></i> 確認出價</button>
+        </form>
+    </div>
+</div>
+
+<!-- End Auction Modal -->
+<div id="endAuctionModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-flag-checkered"></i> 結束拍賣</h3>
+            <button class="modal-close" onclick="closeModal('endAuctionModal')">&times;</button>
+        </div>
+        <form id="endAuctionForm" class="form">
+            <input type="hidden" id="endAuctionId">
+            <div class="form-group">
+                <label>結標方式</label>
+                <select id="endType" class="form-input" onchange="toggleEndWinner()">
+                    <option value="auto">由最高出價者得標</option>
+                    <option value="manual">指定得標者</option>
+                    <option value="cancel">流標 (取消拍賣)</option>
+                </select>
+            </div>
+            <div class="form-group" id="endWinnerGroup" style="display:none">
+                <label>指定得標者</label>
+                <select id="endWinnerId" class="form-input">
+                    {% for m in members %}
+                    <option value="{{ m.id }}">{{ m.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> 確認結束</button>
+        </form>
+    </div>
+</div>
+
+<!-- Bids History Modal -->
+<div id="bidsModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-list"></i> 出價記錄</h3>
+            <button class="modal-close" onclick="closeModal('bidsModal')">&times;</button>
+        </div>
+        <div id="bidsBody" class="modal-body"></div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function showCreateAuction() {
+    document.getElementById('createAuctionModal').classList.add('show');
+}
+document.getElementById('createAuctionForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const data = Object.fromEntries(fd.entries());
+    data.starting_bid = parseInt(data.starting_bid);
+    data.min_increment = parseInt(data.min_increment);
+    data.quantity = parseInt(data.quantity);
+    data.created_by_id = parseInt(data.created_by_id);
+    await apiCall('/api/team/{{ team.id }}/auction/create', 'POST', data);
+    showToast('拍賣已發起！');
+    location.reload();
+});
+
+function placeBid(id) {
+    document.getElementById('bidAuctionId').value = id;
+    document.getElementById('bidAmount').value = '';
+    document.getElementById('bidModal').classList.add('show');
+}
+document.getElementById('bidForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const auctionId = document.getElementById('bidAuctionId').value;
+    const memberId = parseInt(document.getElementById('bidMemberId').value);
+    const amount = parseInt(document.getElementById('bidAmount').value);
+    await apiCall(`/api/team/{{ team.id }}/auction/${auctionId}/bid`, 'POST', { member_id: memberId, amount });
+    showToast('出價成功！');
+    location.reload();
+});
+
+function endAuction(id) {
+    document.getElementById('endAuctionId').value = id;
+    document.getElementById('endType').value = 'auto';
+    document.getElementById('endWinnerGroup').style.display = 'none';
+    document.getElementById('endAuctionModal').classList.add('show');
+}
+function toggleEndWinner() {
+    document.getElementById('endWinnerGroup').style.display =
+        document.getElementById('endType').value === 'manual' ? 'block' : 'none';
+}
+document.getElementById('endAuctionForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const auctionId = document.getElementById('endAuctionId').value;
+    const endType = document.getElementById('endType').value;
+    if (endType === 'cancel') {
+        await apiCall(`/api/team/{{ team.id }}/auction/${auctionId}/end`, 'POST', { winner_id: null, final_price: 0 });
+    } else {
+        const winnerId = endType === 'manual' ? parseInt(document.getElementById('endWinnerId').value) : null;
+        await apiCall(`/api/team/{{ team.id }}/auction/${auctionId}/end`, 'POST', { winner_id: winnerId });
+    }
+    showToast('拍賣已結束！');
+    location.reload();
+});
+
+async function viewBids(id) {
+    const bids = await apiCall(`/api/team/{{ team.id }}/auction/${id}/bids`);
+    let html = `<table class="table"><thead><tr><th>出價者</th><th>金額</th><th>時間</th></tr></thead><tbody>`;
+    for (const b of bids) {
+        html += `<tr><td>${b.bidder_name}</td><td class="text-primary">${b.bid_amount}</td><td>${b.created_at.slice(0,16)}</td></tr>`;
+    }
+    html += `</tbody></table>`;
+    if (!bids.length) html = `<div class="empty-state"><p>尚無出價記錄</p></div>`;
+    document.getElementById('bidsBody').innerHTML = html;
+    document.getElementById('bidsModal').classList.add('show');
+}
+
+function closeModal(id) {
+    document.getElementById(id).classList.remove('show');
+}
+</script>
+{% endblock %}

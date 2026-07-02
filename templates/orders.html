@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block page_title %}分鑽單管理{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-body">
+        {% if orders %}
+        <table class="table">
+            <thead>
+                <tr><th>標題</th><th>BOSS</th><th>總額(鑽)</th><th>人數</th><th>入帳方式</th><th>狀態</th><th>建立時間</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+                {% for o in orders %}
+                <tr>
+                    <td><strong>{{ o.title }}</strong></td>
+                    <td>{{ o.boss_name or '-' }}</td>
+                    <td><strong class="text-primary">{{ o.total_diamond }}</strong></td>
+                    <td>{{ o.member_count }}</td>
+                    <td><span class="badge">{{ '扣薪入帳' if o.income_method=='deduct' else '不扣薪入帳' }}</span></td>
+                    <td><span class="badge badge-{{ o.status }}">{{ o.status }}</span></td>
+                    <td>{{ o.created_at[:16] }}</td>
+                    <td>
+                        <button class="btn btn-sm" onclick="viewOrder({{ o.id }})">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        {% if o.status != 'completed' %}
+                        <button class="btn btn-sm btn-primary" onclick="distributeOrder({{ o.id }})">
+                            <i class="fas fa-hand-holding-dollar"></i> 分配
+                        </button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <i class="fas fa-file-invoice fa-4x"></i>
+            <h3>還沒有分鑽單</h3>
+            <p>記錄BOSS擊殺後會自動建立分鑽單</p>
+            <a href="{{ url_for('boss_page', team_id=team.id) }}" class="btn btn-primary">去記錄BOSS</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- View Order Modal -->
+<div id="viewOrderModal" class="modal modal-lg">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-file-invoice"></i> <span id="orderTitle">分鑽單</span></h3>
+            <button class="modal-close" onclick="closeModal('viewOrderModal')">&times;</button>
+        </div>
+        <div id="orderDetailBody" class="modal-body"></div>
+    </div>
+</div>
+
+<!-- Distribute Modal -->
+<div id="distModal" class="modal modal-lg">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-hand-holding-dollar"></i> 分配鑽石</h3>
+            <button class="modal-close" onclick="closeModal('distModal')">&times;</button>
+        </div>
+        <form id="distForm" class="form">
+            <input type="hidden" name="order_id" id="distOrderId">
+            <div class="form-group">
+                <label>入帳方式</label>
+                <select name="income_method" class="form-input">
+                    <option value="deduct">扣薪入帳 (從成員錢包扣款)</option>
+                    <option value="no_deduct">不扣薪入帳 (會計已預收)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>分鑽總額</label>
+                <input type="number" id="distTotal" class="form-input" placeholder="輸入總鑽量" min="0">
+            </div>
+            <div id="distMembers" class="dist-members">
+                <h4>成員分配</h4>
+                {% for m in members %}
+                <div class="dist-row">
+                    <span class="dist-name">{{ m.name }}</span>
+                    <input type="number" class="form-input dist-amount" data-member="{{ m.id }}" placeholder="分配鑽石" min="0">
+                    <input type="number" class="form-input dist-dkp" data-member="{{ m.id }}" placeholder="DKP" min="0" style="width:100px">
+                </div>
+                {% endfor %}
+            </div>
+            <div class="dist-summary">
+                <span>已分配: <strong id="distAllocated">0</strong> 鑽石</span>
+            </div>
+            <div class="form-actions">
+                <button type="submit" name="status" value="pending" class="btn">暫存</button>
+                <button type="submit" name="status" value="completed" class="btn btn-primary">
+                    <i class="fas fa-check"></i> 完成分配
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function viewOrder(id) {
+    apiCall('/api/team/{{ team.id }}/orders/' + id).then(data => {
+        const o = data.order;
+        document.getElementById('orderTitle').textContent = o.title;
+        let html = `<p><strong>BOSS:</strong> ${o.boss_name || '-'}</p>
+                    <p><strong>總額:</strong> ${o.total_diamond} 鑽</p>
+                    <p><strong>狀態:</strong> <span class="badge badge-${o.status}">${o.status}</span></p>
+                    <p><strong>入帳方式:</strong> ${o.income_method == 'deduct' ? '扣薪入帳' : '不扣薪入帳'}</p>
+                    <hr><h4>分配明細</h4>`;
+        if (data.details.length) {
+            html += `<table class="table"><thead><tr><th>成員</th><th>鑽石</th><th>DKP</th></tr></thead><tbody>`;
+            for (const d of data.details) {
+                html += `<tr><td>${d.member_name}</td><td>${d.diamond_amount}</td><td>${d.dkp_used}</td></tr>`;
+            }
+            html += `</tbody></table>`;
+        } else {
+            html += `<p>尚未分配</p>`;
+        }
+        document.getElementById('orderDetailBody').innerHTML = html;
+        document.getElementById('viewOrderModal').classList.add('show');
+    });
+}
+
+function distributeOrder(id) {
+    document.getElementById('distOrderId').value = id;
+    document.getElementById('distTotal').value = '';
+    document.querySelectorAll('.dist-amount').forEach(el => el.value = '');
+    document.querySelectorAll('.dist-dkp').forEach(el => el.value = '');
+    updateDistSummary();
+    document.getElementById('distModal').classList.add('show');
+}
+
+function updateDistSummary() {
+    let total = 0;
+    document.querySelectorAll('.dist-amount').forEach(el => {
+        total += parseInt(el.value) || 0;
+    });
+    document.getElementById('distAllocated').textContent = total;
+}
+
+document.querySelectorAll('.dist-amount').forEach(el => {
+    el.addEventListener('input', updateDistSummary);
+});
+
+document.getElementById('distTotal').addEventListener('input', function() {
+    const total = parseInt(this.value) || 0;
+    const count = document.querySelectorAll('.dist-amount').length;
+    if (total > 0 && count > 0) {
+        const each = Math.floor(total / count);
+        const remainder = total - each * count;
+        document.querySelectorAll('.dist-amount').forEach((el, i) => {
+            el.value = i === 0 ? each + remainder : each;
+        });
+        updateDistSummary();
+    }
+});
+
+document.getElementById('distForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const submitBtn = e.submitter;
+    const status = submitBtn.value;
+    const orderId = document.getElementById('distOrderId').value;
+    const incomeMethod = document.querySelector('[name="income_method"]').value;
+
+    const distributions = [];
+    document.querySelectorAll('.dist-amount').forEach(el => {
+        const amount = parseInt(el.value) || 0;
+        const memberId = parseInt(el.dataset.member);
+        const dkpEl = document.querySelector(`.dist-dkp[data-member="${memberId}"]`);
+        const dkp = parseInt(dkpEl.value) || 0;
+        if (amount > 0) {
+            distributions.push({ member_id: memberId, amount, dkp_used: dkp });
+        }
+    });
+
+    if (distributions.length === 0) {
+        showToast('請至少分配給一位成員', 'error');
+        return;
+    }
+
+    await apiCall(`/api/team/{{ team.id }}/orders/${orderId}/distribute`, 'POST', {
+        status, distributions, income_method: incomeMethod
+    });
+    showToast('分配完成！');
+    location.reload();
+});
+
+function closeModal(id) {
+    document.getElementById(id).classList.remove('show');
+}
+</script>
+{% endblock %}

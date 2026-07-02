@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block page_title %}報表與統計{% endblock %}
+{% block content %}
+<div class="reports-page">
+    <div class="card">
+        <div class="card-header">
+            <h3><i class="fas fa-chart-bar"></i> 每月BOSS擊殺統計</h3>
+        </div>
+        <div class="card-body">
+            {% if monthly_kills %}
+            <table class="table">
+                <thead>
+                    <tr><th>月份</th><th>擊殺數</th><th>掉落物品數</th></tr>
+                </thead>
+                <tbody>
+                    {% for m in monthly_kills %}
+                    <tr>
+                        <td><strong>{{ m.month }}</strong></td>
+                        <td><span class="badge">{{ m.count }} 次</span></td>
+                        <td>{{ m.total_loot }} 件</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state"><p>尚無數據</p></div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3><i class="fas fa-ranking-star"></i> 成員貢獻排行</h3>
+        </div>
+        <div class="card-body">
+            <table class="table">
+                <thead>
+                    <tr><th>排名</th><th>成員</th><th>總分鑽</th><th>總DKP</th><th>錢包餘額</th></tr>
+                </thead>
+                <tbody>
+                    {% for m in member_ranking %}
+                    <tr>
+                        <td><span class="rank-badge">{{ loop.index }}</span></td>
+                        <td>{{ m.name }}</td>
+                        <td>{{ m.total_deduct }}</td>
+                        <td class="text-warning">{{ m.total_dkp }}</td>
+                        <td class="text-primary">{{ m.balance }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3><i class="fas fa-info-circle"></i> 系統資訊</h3>
+        </div>
+        <div class="card-body">
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">團隊名稱</span>
+                    <span class="info-value">{{ team.name }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">遊戲</span>
+                    <span class="info-value">{{ team.game_name or '未設定' }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">創建時間</span>
+                    <span class="info-value">{{ team.created_at[:10] }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">預設入帳方式</span>
+                    <span class="info-value">{{ '扣薪入帳' if team.default_income_method=='deduct' else '不扣薪入帳' }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

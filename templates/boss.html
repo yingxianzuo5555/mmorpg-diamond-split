@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block page_title %}BOSS擊殺記錄{% endblock %}
+{% block page_actions %}
+<button class="btn btn-primary" onclick="showAddKill()">
+    <i class="fas fa-plus"></i> 新增記錄
+</button>
+{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-body">
+        {% if kills %}
+        <table class="table">
+            <thead>
+                <tr><th>BOSS名稱</th><th>擊殺時間</th><th>團長</th><th>掉落數</th><th>備註</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+                {% for k in kills %}
+                <tr>
+                    <td><strong><i class="fas fa-skull"></i> {{ k.boss_name }}</strong></td>
+                    <td>{{ k.kill_time[:16] }}</td>
+                    <td>{{ k.raid_leader or '-' }}</td>
+                    <td><span class="badge">{{ k.loot_count }} 件</span></td>
+                    <td>{{ k.notes[:20] or '-' }}</td>
+                    <td>
+                        <button class="btn btn-sm" onclick="viewKill({{ k.id }})">
+                            <i class="fas fa-eye"></i> 查看
+                        </button>
+                        <button class="btn btn-sm btn-primary" onclick="addLoot({{ k.id }})">
+                            <i class="fas fa-gift"></i> 添加掉落
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <i class="fas fa-dragon fa-4x"></i>
+            <h3>還沒有BOSS記錄</h3>
+            <p>點擊上方按鈕記錄第一次擊殺！</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Add Kill Modal -->
+<div id="addKillModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-skull"></i> 新增BOSS擊殺</h3>
+            <button class="modal-close" onclick="closeModal('addKillModal')">&times;</button>
+        </div>
+        <form id="addKillForm" class="form">
+            <div class="form-group">
+                <label>BOSS名稱 *</label>
+                <input type="text" name="boss_name" required class="form-input" placeholder="例如: 炎魔、巨龍">
+            </div>
+            <div class="form-group">
+                <label>團長/開團人</label>
+                <input type="text" name="raid_leader" class="form-input" placeholder="誰開的團">
+            </div>
+            <div class="form-group">
+                <label>備註</label>
+                <textarea name="notes" class="form-input" rows="2" placeholder="其他資訊..."></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> 確認擊殺</button>
+        </form>
+    </div>
+</div>
+
+<!-- Kill Detail Modal -->
+<div id="killDetailModal" class="modal modal-lg">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-skull"></i> <span id="detailBossName">BOSS</span></h3>
+            <button class="modal-close" onclick="closeModal('killDetailModal')">&times;</button>
+        </div>
+        <div id="killDetailBody" class="modal-body"></div>
+    </div>
+</div>
+
+<!-- Add Loot Modal -->
+<div id="addLootModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-gift"></i> 添加掉落物品</h3>
+            <button class="modal-close" onclick="closeModal('addLootModal')">&times;</button>
+        </div>
+        <form id="addLootForm" class="form">
+            <input type="hidden" name="kill_id" id="lootKillId">
+            <div class="form-group">
+                <label>物品名稱 *</label>
+                <input type="text" name="item_name" required class="form-input" placeholder="物品名稱">
+            </div>
+            <div class="form-group">
+                <label>數量</label>
+                <input type="number" name="quantity" value="1" min="1" class="form-input">
+            </div>
+            <div class="form-group">
+                <label>價值 (鑽石)</label>
+                <input type="number" name="value" value="0" min="0" class="form-input">
+            </div>
+            <div class="form-group">
+                <label>分配方式</label>
+                <select name="method" class="form-input">
+                    <option value="split">均分</option>
+                    <option value="dkp">DKP分配</option>
+                    <option value="random">隨機</option>
+                    <option value="auction">拍賣</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> 添加</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let currentKillId = null;
+
+function showAddKill() {
+    document.getElementById('addKillModal').classList.add('show');
+}
+document.getElementById('addKillForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const data = Object.fromEntries(fd.entries());
+    await apiCall('/api/team/{{ team.id }}/boss/kill', 'POST', data);
+    showToast('記錄成功！已自動建立分鑽單');
+    location.reload();
+});
+
+function addLoot(killId) {
+    currentKillId = killId;
+    document.getElementById('lootKillId').value = killId;
+    document.getElementById('addLootModal').classList.add('show');
+}
+document.getElementById('addLootForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const data = Object.fromEntries(fd.entries());
+    await apiCall('/api/team/{{ team.id }}/boss/' + currentKillId + '/loot', 'POST', data);
+    showToast('掉落物品已添加');
+    closeModal('addLootModal');
+    e.target.reset();
+});
+
+async function viewKill(killId) {
+    const data = await apiCall('/api/team/{{ team.id }}/boss/' + killId);
+    const k = data.kill;
+    document.getElementById('detailBossName').textContent = k.boss_name;
+    let html = `<p><strong>擊殺時間:</strong> ${k.kill_time}</p>
+                <p><strong>團長:</strong> ${k.raid_leader || '-'}</p>
+                <p><strong>備註:</strong> ${k.notes || '-'}</p>
+                <hr><h4>掉落物品 (${data.items.length})</h4>`;
+    if (data.items.length) {
+        html += `<table class="table"><thead><tr><th>物品</th><th>數量</th><th>價值</th><th>分配方式</th><th>得主</th></tr></thead><tbody>`;
+        for (const item of data.items) {
+            html += `<tr><td>${item.item_name}</td><td>${item.item_quantity}</td><td>${item.item_value}</td><td>${item.distribution_method}</td><td>${item.winner_name || '-'}</td></tr>`;
+        }
+        html += `</tbody></table>`;
+    } else {
+        html += `<div class="empty-state"><p>還沒有掉落記錄</p></div>`;
+    }
+    document.getElementById('killDetailBody').innerHTML = html;
+    document.getElementById('killDetailModal').classList.add('show');
+}
+
+function closeModal(id) {
+    document.getElementById(id).classList.remove('show');
+}
+</script>
+{% endblock %}

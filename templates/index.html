@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block page_title %}團隊列表{% endblock %}
+{% block content %}
+<div class="index-page">
+    <div class="hero-section">
+        <div class="hero-content">
+            <i class="fas fa-gem hero-icon"></i>
+            <h1>MMORPG 分鑽系統</h1>
+            <p>支援多款遊戲的分鑽系統 · 開單分鑽 · 銀行系統 · 拍賣系統 · DKP系統</p>
+            <div class="hero-actions">
+                <a href="{{ url_for('create_team_page') }}" class="btn btn-primary btn-lg">
+                    <i class="fas fa-plus"></i> 創建新團隊
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="teams-grid">
+        {% for t in teams %}
+        <a href="{{ url_for('team_dashboard', team_id=t.id) }}" class="team-card">
+            <div class="team-card-header">
+                <i class="fas fa-shield-halved"></i>
+                <h3>{{ t.name }}</h3>
+            </div>
+            <div class="team-card-body">
+                {% if t.game_name %}
+                <span class="team-tag"><i class="fas fa-gamepad"></i> {{ t.game_name }}</span>
+                {% endif %}
+                {% if t.description %}
+                <p>{{ t.description }}</p>
+                {% endif %}
+            </div>
+            <div class="team-card-footer">
+                <small>創建於 {{ t.created_at[:10] }}</small>
+                <span class="btn btn-sm">進入 <i class="fas fa-arrow-right"></i></span>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

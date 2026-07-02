@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block page_title %}{{ team.name }} - 儀表板{% endblock %}
+{% block page_actions %}
+<div class="header-actions">
+    <a href="{{ url_for('boss_page', team_id=team.id) }}" class="btn btn-primary">
+        <i class="fas fa-plus"></i> 新增BOSS記錄
+    </a>
+</div>
+{% endblock %}
+{% block content %}
+<div class="dashboard">
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon stat-boss">
+                <i class="fas fa-skull"></i>
+            </div>
+            <div class="stat-info">
+                <span class="stat-value">{{ total_kills }}</span>
+                <span class="stat-label">BOSS擊殺</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon stat-order">
+                <i class="fas fa-coins"></i>
+            </div>
+            <div class="stat-info">
+                <span class="stat-value">{{ total_orders }}</span>
+                <span class="stat-label">分鑽單</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon stat-dkp">
+                <i class="fas fa-trophy"></i>
+            </div>
+            <div class="stat-info">
+                <span class="stat-value">{{ total_dkp }}</span>
+                <span class="stat-label">總DKP</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon stat-fund">
+                <i class="fas fa-coins"></i>
+            </div>
+            <div class="stat-info">
+                <span class="stat-value">{{ fund.balance }}</span>
+                <span class="stat-label">公基金</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="card">
+            <div class="card-header">
+                <h3><i class="fas fa-skull"></i> 最近BOSS記錄</h3>
+                <a href="{{ url_for('boss_page', team_id=team.id) }}" class="btn btn-sm">查看全部</a>
+            </div>
+            <div class="card-body">
+                {% if recent_kills %}
+                <table class="table">
+                    <thead>
+                        <tr><th>BOSS</th><th>時間</th><th>掉落</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for k in recent_kills %}
+                        <tr>
+                            <td><strong>{{ k.boss_name }}</strong></td>
+                            <td>{{ k.kill_time[:16] }}</td>
+                            <td><span class="badge">{{ k.loot_count }} 件</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state">
+                    <i class="fas fa-skull fa-3x"></i>
+                    <p>還沒有BOSS記錄，快去打王吧！</p>
+                    <a href="{{ url_for('boss_page', team_id=team.id) }}" class="btn btn-primary">新增記錄</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3><i class="fas fa-file-invoice"></i> 最近分鑽單</h3>
+                <a href="{{ url_for('orders_page', team_id=team.id) }}" class="btn btn-sm">查看全部</a>
+            </div>
+            <div class="card-body">
+                {% if recent_orders %}
+                <table class="table">
+                    <thead>
+                        <tr><th>標題</th><th>金額</th><th>狀態</th><th>人數</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for o in recent_orders %}
+                        <tr>
+                            <td>{{ o.title }}</td>
+                            <td><strong>{{ o.total_diamond }}</strong></td>
+                            <td><span class="badge badge-{{ o.status }}">{{ o.status }}</span></td>
+                            <td>{{ o.member_count }} 人</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state">
+                    <i class="fas fa-file-invoice fa-3x"></i>
+                    <p>還沒有分鑽單</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3><i class="fas fa-users"></i> 團隊成員 ({{ members|length }})</h3>
+            <button class="btn btn-sm btn-primary" onclick="showAddMember()">
+                <i class="fas fa-user-plus"></i> 新增成員
+            </button>
+        </div>
+        <div class="card-body">
+            <table class="table">
+                <thead>
+                    <tr><th>名稱</th><th>角色</th><th>狀態</th><th>操作</th></tr>
+                </thead>
+                <tbody>
+                    {% for m in members %}
+                    <tr>
+                        <td>
+                            <span class="member-avatar">{{ m.name[0] }}</span>
+                            {{ m.name }}
+                        </td>
+                        <td><span class="role-badge role-{{ m.role }}">{{ m.role }}</span></td>
+                        <td>{% if m.can_deposit %}<span class="badge badge-success">可儲值</span>{% endif %}</td>
+                        <td>
+                            <button class="btn btn-sm btn-danger" onclick="deleteMember({{ m.id }})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Add Member Modal -->
+<div id="addMemberModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>新增成員</h3>
+            <button class="modal-close" onclick="closeModal('addMemberModal')">&times;</button>
+        </div>
+        <form id="addMemberForm" class="form">
+            <div class="form-group">
+                <label>成員名稱</label>
+                <input type="text" name="name" required class="form-input" placeholder="遊戲名稱">
+            </div>
+            <div class="form-group">
+                <label>角色</label>
+                <select name="role" class="form-input">
+                    <option value="member">一般成員</option>
+                    <option value="accountant">會計</option>
+                    <option value="leader">管理員</option>
+                    <option value="officer">幹部</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">新增</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function showAddMember() {
+    document.getElementById('addMemberModal').classList.add('show');
+}
+document.getElementById('addMemberForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const data = Object.fromEntries(fd.entries());
+    try {
+        await apiCall('/api/team/{{ team.id }}/members', 'POST', data);
+        showToast('成員新增成功');
+        location.reload();
+    } catch(err) {}
+});
+async function deleteMember(id) {
+    if (!confirm('確定要移除該成員？')) return;
+    await apiCall('/api/team/{{ team.id }}/members/' + id, 'DELETE');
+    showToast('成員已移除');
+    location.reload();
+}
+function closeModal(id) {
+    document.getElementById(id).classList.remove('show');
+}
+</script>
+{% endblock %}

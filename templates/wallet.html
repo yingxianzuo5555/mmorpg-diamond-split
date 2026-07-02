@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block page_title %}錢包與公基金{% endblock %}
+{% block content %}
+<div class="wallet-page">
+    <div class="card fund-card">
+        <div class="card-header">
+            <h3><i class="fas fa-building-columns"></i> 團隊公基金</h3>
+            <div class="header-actions">
+                <button class="btn btn-sm btn-primary" onclick="fundOperate('income')">
+                    <i class="fas fa-plus"></i> 存入
+                </button>
+                <button class="btn btn-sm btn-danger" onclick="fundOperate('expense')">
+                    <i class="fas fa-minus"></i> 支出
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="fund-balance">
+                <span class="fund-amount">{{ fund.balance }}</span>
+                <span class="fund-label">鑽石</span>
+            </div>
+            <div class="fund-stats">
+                <div><small>總收入</small><strong>{{ fund.total_income }}</strong></div>
+                <div><small>總支出</small><strong>{{ fund.total_expense }}</strong></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3><i class="fas fa-users"></i> 成員錢包</h3>
+            <button class="btn btn-sm btn-primary" onclick="batchDeposit()">
+                <i class="fas fa-sack-dollar"></i> 批量儲值
+            </button>
+        </div>
+        <div class="card-body">
+            <table class="table">
+                <thead>
+                    <tr><th>成員</th><th>角色</th><th>錢包餘額</th><th>總儲值</th><th>總提領</th><th>操作</th></tr>
+                </thead>
+                <tbody>
+                    {% for w in wallets %}
+                    <tr>
+                        <td><span class="member-avatar">{{ w.name[0] }}</span> {{ w.name }}</td>
+                        <td><span class="role-badge role-{{ w.role }}">{{ w.role }}</span></td>
+                        <td><strong class="text-primary">{{ w.balance }}</strong></td>
+                        <td>{{ w.total_deposited }}</td>
+                        <td>{{ w.total_withdrawn }}</td>
+                        <td>
+                            <button class="btn btn-sm btn-primary" onclick="depositTo({{ w.id }}, '{{ w.name }}')">
+                                <i class="fas fa-plus"></i> 儲值
+                            </button>
+                            <button class="btn btn-sm" onclick="viewTxns({{ w.id }}, '{{ w.name }}')">
+                                <i class="fas fa-clock-rotate"></i> 明細
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Deposit Modal -->
+<div id="depositModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-sack-dollar"></i> 儲值鑽石</h3>
+            <button class="modal-close" onclick="closeModal('depositModal')">&times;</button>
+        </div>
+        <form id="depositForm" class="form">
+            <input type="hidden" name="member_id" id="depMemberId">
+            <p>儲值給: <strong id="depMemberName"></strong></p>
+            <div class="form-group">
+                <label>鑽石數量</label>
+                <input type="number" name="amount" required min="1" class="form-input" placeholder="輸入數量">
+            </div>
+            <div class="form-group">
+                <label>說明</label>
+                <input type="text" name="description" class="form-input" placeholder="例如: 課長儲值">
+            </div>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> 確認儲值</button>
+        </form>
+    </div>
+</div>
+
+<!-- Fund Modal -->
+<div id="fundModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="fundModalTitle"><i class="fas fa-building-columns"></i> 公基金操作</h3>
+            <button class="modal-close" onclick="closeModal('fundModal')">&times;</button>
+        </div>
+        <form id="fundForm" class="form">
+            <input type="hidden" name="type" id="fundType">
+            <div class="form-group">
+                <label>數量</label>
+                <input type="number" name="amount" required min="1" class="form-input" placeholder="輸入數量">
+            </div>
+            <div class="form-group">
+                <label>說明</label>
+                <input type="text" name="description" class="form-input" placeholder="操作原因">
+            </div>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> 確認</button>
+        </form>
+    </div>
+</div>
+
+<!-- Transactions Modal -->
+<div id="txnModal" class="modal modal-lg">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-clock-rotate"></i> <span id="txnMemberName">交易明細</span></h3>
+            <button class="modal-close" onclick="closeModal('txnModal')">&times;</button>
+        </div>
+        <div id="txnBody" class="modal-body"></div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function depositTo(id, name) {
+    document.getElementById('depMemberId').value = id;
+    document.getElementById('depMemberName').textContent = name;
+    document.getElementById('depositModal').classList.add('show');
+}
+document.getElementById('depositForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const data = Object.fromEntries(fd.entries());
+    data.amount = parseInt(data.amount);
+    await apiCall('/api/team/{{ team.id }}/wallet/deposit', 'POST', data);
+    showToast('儲值成功！');
+    location.reload();
+});
+
+function fundOperate(type) {
+    document.getElementById('fundType').value = type;
+    document.getElementById('fundModalTitle').innerHTML = type === 'income' ?
+        '<i class="fas fa-plus"></i> 存入公基金' : '<i class="fas fa-minus"></i> 公基金支出';
+    document.getElementById('fundModal').classList.add('show');
+}
+document.getElementById('fundForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const data = Object.fromEntries(fd.entries());
+    data.amount = parseInt(data.amount);
+    await apiCall('/api/team/{{ team.id }}/fund/operate', 'POST', data);
+    showToast('操作成功！');
+    location.reload();
+});
+
+async function viewTxns(id, name) {
+    document.getElementById('txnMemberName').textContent = name + ' 的交易明細';
+    const txns = await apiCall('/api/team/{{ team.id }}/wallet/transactions?member_id=' + id);
+    let html = `<table class="table"><thead><tr><th>時間</th><th>類型</th><th>金額</th><th>餘額</th><th>說明</th></tr></thead><tbody>`;
+    for (const t of txns) {
+        const typeClass = t.type === 'deposit' ? 'text-success' : 'text-danger';
+        html += `<tr>
+            <td>${t.created_at.slice(0,16)}</td>
+            <td class="${typeClass}">${t.type === 'deposit' ? '儲值' : t.type === 'deduct' ? '扣除' : '提領'}</td>
+            <td class="${typeClass}">${t.type === 'deposit' ? '+' : '-'}${t.amount}</td>
+            <td>${t.balance_after}</td>
+            <td>${t.description}</td>
+        </tr>`;
+    }
+    html += `</tbody></table>`;
+    document.getElementById('txnBody').innerHTML = html;
+    document.getElementById('txnModal').classList.add('show');
+}
+
+function batchDeposit() {
+    // Simple batch: auto-distribute a total amount equally
+    const total = prompt('請輸入批量儲值總額（將平均分配給所有成員）：');
+    if (!total) return;
+    // This would need a batch API, for now just redirect to deposit for each
+    showToast('請逐個成員進行儲值操作', 'info');
+}
+
+function closeModal(id) {
+    document.getElementById(id).classList.remove('show');
+}
+</script>
+{% endblock %}

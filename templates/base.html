@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ team.name if team else '分鑽系統' }} - MMORPG 分鑽系統</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-inner">
+            <a href="{{ url_for('index') }}" class="nav-brand">
+                <i class="fas fa-gem"></i>
+                <span>分鑽系統</span>
+            </a>
+            {% if team %}
+            <div class="nav-team-info">
+                <i class="fas fa-shield-halved"></i>
+                {{ team.name }}
+                <span class="nav-game-tag">{{ team.game_name }}</span>
+            </div>
+            <div class="nav-links">
+                <a href="{{ url_for('team_dashboard', team_id=team.id) }}" class="nav-link">
+                    <i class="fas fa-chart-pie"></i> 儀表板
+                </a>
+                <a href="{{ url_for('boss_page', team_id=team.id) }}" class="nav-link">
+                    <i class="fas fa-skull"></i> BOSS記錄
+                </a>
+                <a href="{{ url_for('orders_page', team_id=team.id) }}" class="nav-link">
+                    <i class="fas fa-coins"></i> 分鑽單
+                </a>
+                <a href="{{ url_for('auction_page', team_id=team.id) }}" class="nav-link">
+                    <i class="fas fa-gavel"></i> 拍賣
+                </a>
+                <a href="{{ url_for('dkp_page', team_id=team.id) }}" class="nav-link">
+                    <i class="fas fa-trophy"></i> DKP
+                </a>
+                <a href="{{ url_for('wallet_page', team_id=team.id) }}" class="nav-link">
+                    <i class="fas fa-wallet"></i> 錢包
+                </a>
+                <a href="{{ url_for('reports_page', team_id=team.id) }}" class="nav-link">
+                    <i class="fas fa-receipt"></i> 報表
+                </a>
+                <a href="{{ url_for('settings_page', team_id=team.id) }}" class="nav-link">
+                    <i class="fas fa-gear"></i> 設定
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </nav>
+
+    <main class="main-content">
+        {% if team %}
+        <div class="page-header">
+            <h1>{% block page_title %}儀表板{% endblock %}</h1>
+            {% block page_actions %}{% endblock %}
+        </div>
+        {% endif %}
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+        function showToast(msg, type='success') {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = 'toast toast-' + type + ' show';
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+        async function apiCall(url, method='GET', body=null) {
+            const opts = { method, headers: {'Content-Type': 'application/json'} };
+            if (body) opts.body = JSON.stringify(body);
+            const r = await fetch(url, opts);
+            const d = await r.json();
+            if (!r.ok) { showToast(d.error || '操作失敗', 'error'); throw new Error(d.error); }
+            return d;
+        }
+    </script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

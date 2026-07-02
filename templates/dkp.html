@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block page_title %}DKP 系統{% endblock %}
+{% block page_actions %}
+<button class="btn btn-primary" onclick="showAddDkp()">
+    <i class="fas fa-plus"></i> 新增DKP
+</button>
+{% endblock %}
+{% block content %}
+<div class="dkp-page">
+    <div class="card">
+        <div class="card-header">
+            <h3><i class="fas fa-trophy"></i> DKP 排行榜</h3>
+        </div>
+        <div class="card-body">
+            <table class="table">
+                <thead>
+                    <tr><th>排名</th><th>成員</th><th>角色</th><th>總DKP</th></tr>
+                </thead>
+                <tbody>
+                    {% for m in dkp_summary|sort(attribute='total_dkp', reverse=True) %}
+                    <tr>
+                        <td><span class="rank-badge">{{ loop.index }}</span></td>
+                        <td><span class="member-avatar">{{ m.name[0] }}</span> {{ m.name }}</td>
+                        <td><span class="role-badge role-{{ m.role }}">{{ m.role }}</span></td>
+                        <td><strong class="text-warning">{{ m.total_dkp }}</strong></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3><i class="fas fa-clock-rotate"></i> DKP 變動記錄</h3>
+        </div>
+        <div class="card-body">
+            <table class="table">
+                <thead>
+                    <tr><th>時間</th><th>成員</th><th>變動</th><th>原因</th><th>相關BOSS</th></tr>
+                </thead>
+                <tbody>
+                    {% for h in histories %}
+                    <tr>
+                        <td>{{ h.created_at[:16] }}</td>
+                        <td>{{ h.member_name }}</td>
+                        <td><strong class="{{ 'text-success' if h.dkp > 0 else 'text-danger' }}">{{ '+' if h.dkp > 0 }}{{ h.dkp }}</strong></td>
+                        <td>{{ h.reason or '-' }}</td>
+                        <td>{{ h.boss_name or '-' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Add DKP Modal -->
+<div id="addDkpModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-plus-circle"></i> 新增DKP</h3>
+            <button class="modal-close" onclick="closeModal('addDkpModal')">&times;</button>
+        </div>
+        <form id="addDkpForm" class="form">
+            <div class="form-group">
+                <label>成員</label>
+                <select name="member_id" class="form-input" required>
+                    {% for m in dkp_summary %}
+                    <option value="{{ m.id }}">{{ m.name }} (當前: {{ m.total_dkp }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>DKP 數量</label>
+                <input type="number" name="dkp" required class="form-input" placeholder="正數=增加，負數=扣除">
+                <small class="form-hint">輸入正數增加DKP，負數扣除DKP</small>
+            </div>
+            <div class="form-group">
+                <label>原因</label>
+                <input type="text" name="reason" class="form-input" placeholder="例如: 參與BOSS、拍賣消耗">
+            </div>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> 確認</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function showAddDkp() {
+    document.getElementById('addDkpModal').classList.add('show');
+}
+document.getElementById('addDkpForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const data = Object.fromEntries(fd.entries());
+    data.dkp = parseInt(data.dkp);
+    data.member_id = parseInt(data.member_id);
+    if (data.dkp === 0) {
+        showToast('DKP數量不能為0', 'error');
+        return;
+    }
+    await apiCall('/api/team/{{ team.id }}/dkp/add', 'POST', data);
+    showToast('DKP 已更新！');
+    location.reload();
+});
+function closeModal(id) {
+    document.getElementById(id).classList.remove('show');
+}
+</script>
+{% endblock %}
