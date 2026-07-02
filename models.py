@@ -6,6 +6,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 DB_PATH = os.path.join(os.path.dirname(__file__), 'data', 'diamond.db')
 
 def get_db():
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
@@ -13,6 +14,7 @@ def get_db():
     return conn
 
 def init_db():
+    # Ensure data directory exists
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = get_db()
     cursor = conn.cursor()

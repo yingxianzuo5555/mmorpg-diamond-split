@@ -636,6 +636,10 @@ def reports_page(team_id):
                          member_ranking=[dict(r) for r in member_ranking])
 
 # ==================== Start ====================
+# Initialize database on startup
+init_db()
+init_demo_data()
+
 
 if __name__ == '__main__':
     init_db()
