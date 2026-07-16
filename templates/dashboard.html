@@ -115,9 +115,11 @@
     <div class="card">
         <div class="card-header">
             <h3><i class="fas fa-users"></i> 團隊成員 ({{ members|length }})</h3>
+            {% if current_member and current_member.role in ('leader', 'accountant') %}
             <button class="btn btn-sm btn-primary" onclick="showAddMember()">
                 <i class="fas fa-user-plus"></i> 新增成員
             </button>
+            {% endif %}
         </div>
         <div class="card-body">
             <table class="table">
@@ -134,9 +136,11 @@
                         <td><span class="role-badge role-{{ m.role }}">{{ m.role }}</span></td>
                         <td>{% if m.can_deposit %}<span class="badge badge-success">可儲值</span>{% endif %}</td>
                         <td>
-                            <button class="btn btn-sm btn-danger" onclick="deleteMember({{ m.id }})">
+                            {% if current_member and current_member.role in ('leader', 'accountant') %}
+                        <button class="btn btn-sm btn-danger" onclick="deleteMember({{ m.id }})">
                                 <i class="fas fa-trash"></i>
                             </button>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}

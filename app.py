@@ -6,6 +6,8 @@ import json
 
 app = Flask(__name__)
 app.secret_key = 'mmorpg-diamond-split-secret-key-2024'
+app.config['SESSION_PERMANENT'] = True
+app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
 
 # ==================== Helper ====================
 
@@ -248,6 +250,8 @@ def api_get_members(team_id):
 
 @app.route('/api/team/<int:team_id>/members', methods=['POST'])
 def api_add_member(team_id):
+    if not is_admin(team_id):
+        return jsonify({'error': '權限不足'}), 403
     data = request.json
     name = data.get('name')
     role = data.get('role', 'member')
@@ -269,6 +273,8 @@ def api_add_member(team_id):
 
 @app.route('/api/team/<int:team_id>/members/<int:member_id>', methods=['PUT'])
 def api_update_member(team_id, member_id):
+    if not is_admin(team_id):
+        return jsonify({'error': '權限不足'}), 403
     data = request.json
     db = get_db()
     db.execute("UPDATE members SET role=?, can_deposit=? WHERE id=? AND team_id=?",
@@ -279,6 +285,8 @@ def api_update_member(team_id, member_id):
 
 @app.route('/api/team/<int:team_id>/members/<int:member_id>', methods=['DELETE'])
 def api_delete_member(team_id, member_id):
+    if not is_admin(team_id):
+        return jsonify({'error': '權限不足'}), 403
     db = get_db()
     db.execute("UPDATE members SET is_active=0 WHERE id=? AND team_id=?", [member_id, team_id])
     db.commit()
@@ -305,6 +313,8 @@ def boss_page(team_id):
 
 @app.route('/api/team/<int:team_id>/boss/kill', methods=['POST'])
 def api_create_kill(team_id):
+    if not is_admin(team_id):
+        return jsonify({'error': '權限不足'}), 403
     data = request.json
     db = get_db()
     cur = db.execute(
@@ -344,6 +354,8 @@ def api_get_kill(team_id, kill_id):
 
 @app.route('/api/team/<int:team_id>/boss/<int:kill_id>/loot', methods=['POST'])
 def api_add_loot(team_id, kill_id):
+    if not is_admin(team_id):
+        return jsonify({'error': '權限不足'}), 403
     data = request.json
     db = get_db()
     db.execute(
@@ -357,6 +369,8 @@ def api_add_loot(team_id, kill_id):
 
 @app.route('/api/team/<int:team_id>/boss/<int:kill_id>/loot/<int:item_id>', methods=['DELETE'])
 def api_delete_loot(team_id, kill_id, item_id):
+    if not is_admin(team_id):
+        return jsonify({'error': '權限不足'}), 403
     db = get_db()
     db.execute("DELETE FROM loot_items WHERE id=? AND kill_id=?", [item_id, kill_id])
     db.commit()
@@ -485,6 +499,8 @@ def api_get_order(team_id, order_id):
 @app.route('/api/team/<int:team_id>/orders/<int:order_id>/distribute', methods=['POST'])
 def api_distribute_order(team_id, order_id):
     """Distribute diamonds to members"""
+    if not is_admin(team_id):
+        return jsonify({'error': '權限不足'}), 403
     data = request.json
     db = get_db()
     order = db.execute("SELECT * FROM split_orders WHERE id=? AND team_id=?", [order_id, team_id]).fetchone()
@@ -540,6 +556,8 @@ def api_distribute_order(team_id, order_id):
 
 @app.route('/api/team/<int:team_id>/orders/<int:order_id>/status', methods=['PUT'])
 def api_update_order_status(team_id, order_id):
+    if not is_admin(team_id):
+        return jsonify({'error': '權限不足'}), 403
     data = request.json
     db = get_db()
     status = data.get('status')
@@ -572,6 +590,8 @@ def wallet_page(team_id):
 @app.route('/api/team/<int:team_id>/wallet/deposit', methods=['POST'])
 def api_wallet_deposit(team_id):
     """Deposit diamonds to a member's wallet"""
+    if not is_admin(team_id):
+        return jsonify({'error': '權限不足'}), 403
     data = request.json
     member_id = data['member_id']
     amount = data['amount']
@@ -587,6 +607,8 @@ def api_wallet_deposit(team_id):
 
 @app.route('/api/team/<int:team_id>/wallet/withdraw', methods=['POST'])
 def api_wallet_withdraw(team_id):
+    if not is_admin(team_id):
+        return jsonify({'error': '權限不足'}), 403
     data = request.json
     member_id = data['member_id']
     amount = data['amount']
@@ -646,6 +668,8 @@ def auction_page(team_id):
 
 @app.route('/api/team/<int:team_id>/auction/create', methods=['POST'])
 def api_create_auction(team_id):
+    if not is_admin(team_id):
+        return jsonify({'error': '權限不足'}), 403
     data = request.json
     db = get_db()
     db.execute(
@@ -686,6 +710,8 @@ def api_place_bid(team_id, auction_id):
 
 @app.route('/api/team/<int:team_id>/auction/<int:auction_id>/end', methods=['POST'])
 def api_end_auction(team_id, auction_id):
+    if not is_admin(team_id):
+        return jsonify({'error': '權限不足'}), 403
     data = request.json
     db = get_db()
     auction = db.execute("SELECT * FROM auctions WHERE id=? AND team_id=?", [auction_id, team_id]).fetchone()
@@ -751,6 +777,8 @@ def dkp_page(team_id):
 
 @app.route('/api/team/<int:team_id>/dkp/add', methods=['POST'])
 def api_add_dkp(team_id):
+    if not is_admin(team_id):
+        return jsonify({'error': '權限不足'}), 403
     data = request.json
     db = get_db()
     db.execute(
@@ -775,6 +803,8 @@ def api_fund_transactions(team_id):
 
 @app.route('/api/team/<int:team_id>/fund/operate', methods=['POST'])
 def api_fund_operate(team_id):
+    if not is_admin(team_id):
+        return jsonify({'error': '權限不足'}), 403
     data = request.json
     amount = data['amount']
     op_type = data['type']  # income or expense
@@ -819,6 +849,8 @@ def settings_page(team_id):
 
 @app.route('/api/team/<int:team_id>/settings', methods=['POST'])
 def api_update_settings(team_id):
+    if not is_admin(team_id):
+        return jsonify({'error': '權限不足'}), 403
     data = request.json
     db = get_db()
     for key, value in data.items():

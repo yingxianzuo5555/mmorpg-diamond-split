@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% block page_title %}拍賣系統{% endblock %}
 {% block page_actions %}
+{% if current_member and current_member.role in ('leader', 'accountant') %}
 <button class="btn btn-primary" onclick="showCreateAuction()">
     <i class="fas fa-plus"></i> 發起拍賣
 </button>
+{% endif %}
 {% endblock %}
 {% block content %}
 <div class="auction-grid">
@@ -44,9 +46,11 @@
                 <button class="btn btn-primary" onclick="placeBid({{ a.id }})">
                     <i class="fas fa-gavel"></i> 出價
                 </button>
+                {% if current_member and current_member.role in ('leader', 'accountant') %}
                 <button class="btn btn-danger" onclick="endAuction({{ a.id }})">
                     <i class="fas fa-stop"></i> 結束
                 </button>
+                {% endif %}
                 {% endif %}
                 <button class="btn btn-sm" onclick="viewBids({{ a.id }})">
                     <i class="fas fa-list"></i> 出價記錄

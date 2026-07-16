@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% block page_title %}DKP 系統{% endblock %}
 {% block page_actions %}
+{% if current_member and current_member.role in ('leader', 'accountant') %}
 <button class="btn btn-primary" onclick="showAddDkp()">
     <i class="fas fa-plus"></i> 新增DKP
 </button>
+{% endif %}
 {% endblock %}
 {% block content %}
 <div class="dkp-page">
