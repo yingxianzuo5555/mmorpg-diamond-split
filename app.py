@@ -893,6 +893,52 @@ def reports_page(team_id):
                          monthly_kills=[dict(r) for r in monthly_kills],
                          member_ranking=[dict(r) for r in member_ranking])
 
+
+@app.route('/api/change-password', methods=['POST'])
+def api_change_password():
+    member = get_current_member()
+    if not member:
+        return jsonify({'error': '請先登入'}), 401
+    data = request.json
+    old_pw = data.get('old_password', '')
+    new_pw = data.get('new_password', '')
+    if not new_pw or len(new_pw) < 4:
+        return jsonify({'error': '密碼至少4個字元'}), 400
+    db = get_db()
+    current = db.execute("SELECT password_hash FROM members WHERE id=?", [member['id']]).fetchone()
+    saved_hash = current['password_hash'] or ''
+    # Verify old password
+    if saved_hash and not check_password_hash(saved_hash, old_pw):
+        db.close()
+        return jsonify({'error': '舊密碼錯誤'}), 400
+    # Update
+    new_hash = generate_password_hash(new_pw)
+    db.execute("UPDATE members SET password_hash=? WHERE id=?", [new_hash, member['id']])
+    db.commit()
+    db.close()
+    return jsonify({'success': True, 'message': '密碼修改成功'})
+
+@app.route('/api/set-password', methods=['POST'])
+def api_set_password():
+    """Set password for accounts that don't have one yet"""
+    member = get_current_member()
+    if not member:
+        return jsonify({'error': '請先登入'}), 401
+    data = request.json
+    new_pw = data.get('new_password', '')
+    if not new_pw or len(new_pw) < 4:
+        return jsonify({'error': '密碼至少4個字元'}), 400
+    db = get_db()
+    current = db.execute("SELECT password_hash FROM members WHERE id=?", [member['id']]).fetchone()
+    if current['password_hash']:
+        db.close()
+        return jsonify({'error': '已有密碼，請使用修改功能'}), 400
+    new_hash = generate_password_hash(new_pw)
+    db.execute("UPDATE members SET password_hash=? WHERE id=?", [new_hash, member['id']])
+    db.commit()
+    db.close()
+    return jsonify({'success': True, 'message': '密碼設定成功'})
+
 # ==================== Start ====================
 # Initialize database on startup
 init_db()

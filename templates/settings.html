@@ -46,6 +46,32 @@
 
     <div class="card">
         <div class="card-header">
+            <h3><i class="fas fa-key"></i> 修改密碼</h3>
+        </div>
+        <div class="card-body">
+            <form id="passwordForm" class="form">
+                <div class="form-group">
+                    <label>目前密碼</label>
+                    <input type="password" id="oldPassword" class="form-input" placeholder="還沒設定密碼則留空">
+                    <small class="form-hint">如果還沒有設定過密碼，直接填新密碼即可</small>
+                </div>
+                <div class="form-group">
+                    <label>新密碼 *</label>
+                    <input type="password" id="newPassword" class="form-input" required placeholder="至少4個字元" minlength="4">
+                </div>
+                <div class="form-group">
+                    <label>確認新密碼</label>
+                    <input type="password" id="confirmPassword" class="form-input" required placeholder="再次輸入新密碼">
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> 修改密碼
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
             <h3><i class="fas fa-info-circle"></i> 團隊資訊</h3>
         </div>
         <div class="card-body">
@@ -69,6 +95,34 @@
 {% endblock %}
 {% block scripts %}
 <script>
+document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const oldPw = document.getElementById('oldPassword').value;
+    const newPw = document.getElementById('newPassword').value;
+    const confirmPw = document.getElementById('confirmPassword').value;
+    if (newPw !== confirmPw) {
+        showToast('兩次輸入的密碼不一致', 'error');
+        return;
+    }
+    if (newPw.length < 4) {
+        showToast('密碼至少4個字元', 'error');
+        return;
+    }
+    try {
+        // Try change password first
+        const r = await apiCall('/api/change-password', 'POST', { old_password: oldPw, new_password: newPw });
+        showToast('密碼修改成功！');
+        document.getElementById('passwordForm').reset();
+    } catch(err) {
+        // If old password wrong, try setting for first time
+        if (err.message.includes('舊密碼錯誤')) {
+            showToast('舊密碼不正確', 'error');
+        } else {
+            showToast(err.message || '修改失敗', 'error');
+        }
+    }
+});
+
 document.getElementById('settingsForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
