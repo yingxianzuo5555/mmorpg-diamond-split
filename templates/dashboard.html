@@ -124,7 +124,7 @@
         <div class="card-body">
             <table class="table">
                 <thead>
-                    <tr><th>名稱</th><th>角色</th><th>狀態</th><th>操作</th></tr>
+                    <tr><th>名稱</th><th>角色</th><th>權限</th><th>操作</th></tr>
                 </thead>
                 <tbody>
                     {% for m in members %}
@@ -137,7 +137,13 @@
                         <td>{% if m.can_deposit %}<span class="badge badge-success">可儲值</span>{% endif %}</td>
                         <td>
                             {% if current_member and current_member.role in ('leader', 'accountant') %}
-                        <button class="btn btn-sm btn-danger" onclick="deleteMember({{ m.id }})">
+                        <select class="form-input role-select" data-member="{{ m.id }}" data-current="{{ m.role }}"
+                                onchange="changeRole({{ m.id }}, this.value)" style="width:auto;font-size:12px;padding:4px 8px">
+                                <option value="member" {{ 'selected' if m.role=='member' }}>成員</option>
+                                <option value="accountant" {{ 'selected' if m.role=='accountant' }}>會計</option>
+                                <option value="leader" {{ 'selected' if m.role=='leader' }}>管理員</option>
+                            </select>
+                            <button class="btn btn-sm btn-danger" onclick="deleteMember({{ m.id }})">
                                 <i class="fas fa-trash"></i>
                             </button>
                             {% endif %}
@@ -191,6 +197,11 @@ document.getElementById('addMemberForm').addEventListener('submit', async (e) =>
         location.reload();
     } catch(err) {}
 });
+async function changeRole(id, role) {
+    await apiCall('/api/team/{{ team.id }}/members/' + id, 'PUT', { role: role, can_deposit: role === 'leader' ? 1 : 0 });
+    showToast('角色已更新！');
+    location.reload();
+}
 async function deleteMember(id) {
     if (!confirm('確定要移除該成員？')) return;
     await apiCall('/api/team/{{ team.id }}/members/' + id, 'DELETE');

@@ -597,3 +597,13 @@ body {
 .nav-logout-btn:hover {
     background: rgba(255,255,255,0.2);
 }
+
+.role-select {
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: white;
+    cursor: pointer;
+}
+.role-select:focus {
+    border-color: var(--primary);
+}
