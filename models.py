@@ -34,6 +34,8 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             team_id INTEGER NOT NULL,
             name TEXT NOT NULL,
+            password_hash TEXT DEFAULT '',
+            display_name TEXT DEFAULT '',
             role TEXT DEFAULT 'member',
             can_deposit INTEGER DEFAULT 0,
             is_active INTEGER DEFAULT 1,
@@ -190,7 +192,27 @@ def init_db():
             setting_value TEXT DEFAULT '',
             UNIQUE(team_id, setting_key)
         );
+
+        CREATE TABLE IF NOT EXISTS boss_participants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            kill_id INTEGER NOT NULL,
+            member_id INTEGER NOT NULL,
+            created_at TEXT DEFAULT (datetime('now','localtime')),
+            FOREIGN KEY (kill_id) REFERENCES boss_kills(id),
+            FOREIGN KEY (member_id) REFERENCES members(id),
+            UNIQUE(kill_id, member_id)
+        );
     ''')
+
+    # Migration: add columns for existing databases
+    try:
+        cursor.execute("ALTER TABLE members ADD COLUMN password_hash TEXT DEFAULT ''")
+    except:
+        pass
+    try:
+        cursor.execute("ALTER TABLE members ADD COLUMN display_name TEXT DEFAULT ''")
+    except:
+        pass
 
     conn.commit()
     conn.close()

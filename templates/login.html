@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block page_title %}登入{% endblock %}
+{% block content %}
+<div class="form-page">
+    <div class="form-card" style="max-width:420px">
+        <div class="form-card-header">
+            <i class="fas fa-gem"></i>
+            <h2>分鑽系統</h2>
+            <p>登入或註冊以繼續</p>
+        </div>
+        
+        <!-- Login Form -->
+        <form id="loginForm" class="form" style="margin-bottom:24px">
+            <h3 style="margin-bottom:16px"><i class="fas fa-sign-in-alt"></i> 登入</h3>
+            <div class="form-group">
+                <label>遊戲名稱</label>
+                <input type="text" id="loginName" class="form-input" required placeholder="你的遊戲角色名稱">
+            </div>
+            <div class="form-group">
+                <label>密碼</label>
+                <input type="password" id="loginPassword" class="form-input" placeholder="未設定密碼則留空">
+            </div>
+            <div class="form-group">
+                <label>團隊 (選填，同名時區分用)</label>
+                <select id="loginTeam" class="form-input">
+                    <option value="">自動偵測</option>
+                    {% for t in teams if teams %}
+                    <option value="{{ t.id }}">{{ t.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary btn-lg" style="width:100%">
+                <i class="fas fa-sign-in-alt"></i> 登入
+            </button>
+        </form>
+        
+        <hr style="margin:20px 0">
+        
+        <!-- Register Form -->
+        <form id="registerForm" class="form">
+            <h3 style="margin-bottom:16px"><i class="fas fa-user-plus"></i> 註冊新帳號</h3>
+            <div class="form-group">
+                <label>你的遊戲名稱 *</label>
+                <input type="text" id="regName" class="form-input" required placeholder="遊戲角色名稱">
+            </div>
+            <div class="form-group">
+                <label>設定密碼</label>
+                <input type="password" id="regPassword" class="form-input" placeholder="留空則不使用密碼">
+            </div>
+            <div class="form-group">
+                <label>選擇團隊 *</label>
+                <select id="regTeam" class="form-input" required>
+                    <option value="">請選擇團隊</option>
+                    {% for t in teams if teams %}
+                    <option value="{{ t.id }}">{{ t.name }}</option>
+                    {% endfor %}
+                </select>
+                <small class="form-hint">如果還沒有團隊，請先由管理員建立</small>
+            </div>
+            <button type="submit" class="btn btn-primary btn-lg" style="width:100%">
+                <i class="fas fa-user-plus"></i> 註冊並登入
+            </button>
+        </form>
+        
+        <div style="text-align:center;margin-top:16px">
+            <a href="/" class="btn btn-sm"><i class="fas fa-arrow-left"></i> 返回首頁</a>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = {
+        name: document.getElementById('loginName').value,
+        password: document.getElementById('loginPassword').value,
+        team_id: document.getElementById('loginTeam').value || null
+    };
+    try {
+        const r = await apiCall('/api/login', 'POST', data);
+        showToast('登入成功！');
+        setTimeout(() => window.location.href = '/team/' + r.team_id, 800);
+    } catch(err) {
+        showToast(err.message || '登入失敗', 'error');
+    }
+});
+
+document.getElementById('registerForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = {
+        name: document.getElementById('regName').value,
+        password: document.getElementById('regPassword').value,
+        team_id: parseInt(document.getElementById('regTeam').value)
+    };
+    if (!data.team_id) { showToast('請選擇團隊', 'error'); return; }
+    try {
+        const r = await apiCall('/api/register', 'POST', data);
+        showToast('註冊成功！');
+        setTimeout(() => window.location.href = '/team/' + r.team_id, 800);
+    } catch(err) {
+        showToast(err.message || '註冊失敗', 'error');
+    }
+});
+</script>
+{% endblock %}

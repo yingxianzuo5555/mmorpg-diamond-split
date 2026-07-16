@@ -49,6 +49,21 @@
                 </a>
             </div>
             {% endif %}
+            <div class="nav-right">
+                {% if current_member %}
+                <span class="nav-user">
+                    <i class="fas fa-user"></i> {{ current_member.name }}
+                    <span class="role-badge role-{{ current_member.role }}">{{ current_member.role }}</span>
+                </span>
+                <button class="btn btn-sm nav-logout-btn" onclick="logout()">
+                    <i class="fas fa-sign-out-alt"></i> 登出
+                </button>
+                {% else %}
+                <a href="/login" class="nav-link">
+                    <i class="fas fa-sign-in-alt"></i> 登入
+                </a>
+                {% endif %}
+            </div>
         </div>
     </nav>
 
@@ -87,6 +102,12 @@
             const d = await r.json();
             if (!r.ok) { showToast(d.error || '操作失敗', 'error'); throw new Error(d.error); }
             return d;
+        }
+    </script>
+    <script>
+        async function logout() {
+            await fetch('/api/logout', { method: 'POST' });
+            window.location.href = '/login';
         }
     </script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>

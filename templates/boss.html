@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% block page_title %}BOSS擊殺記錄{% endblock %}
 {% block page_actions %}
+{% if current_member and current_member.role in ('leader', 'accountant') %}
 <button class="btn btn-primary" onclick="showAddKill()">
     <i class="fas fa-plus"></i> 新增記錄
 </button>
+{% endif %}
 {% endblock %}
 {% block content %}
 <div class="card">
@@ -11,7 +13,7 @@
         {% if kills %}
         <table class="table">
             <thead>
-                <tr><th>BOSS名稱</th><th>擊殺時間</th><th>團長</th><th>掉落數</th><th>備註</th><th>操作</th></tr>
+                <tr><th>BOSS名稱</th><th>擊殺時間</th><th>團長</th><th>參與人數</th><th>掉落數</th><th>備註</th><th>操作</th></tr>
             </thead>
             <tbody>
                 {% for k in kills %}
@@ -19,15 +21,24 @@
                     <td><strong><i class="fas fa-skull"></i> {{ k.boss_name }}</strong></td>
                     <td>{{ k.kill_time[:16] }}</td>
                     <td>{{ k.raid_leader or '-' }}</td>
+                    <td><span class="badge badge-info">{{ k.participant_count or 0 }} 人</span></td>
                     <td><span class="badge">{{ k.loot_count }} 件</span></td>
                     <td>{{ k.notes[:20] or '-' }}</td>
                     <td>
                         <button class="btn btn-sm" onclick="viewKill({{ k.id }})">
-                            <i class="fas fa-eye"></i> 查看
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        {% if current_member and current_member.role in ('leader', 'accountant') %}
+                        <button class="btn btn-sm" onclick="editKill({{ k.id }})">
+                            <i class="fas fa-pen"></i>
                         </button>
                         <button class="btn btn-sm btn-primary" onclick="addLoot({{ k.id }})">
-                            <i class="fas fa-gift"></i> 添加掉落
+                            <i class="fas fa-gift"></i> 掉落
                         </button>
+                        <button class="btn btn-sm btn-info" onclick="manageParticipants({{ k.id }}, '{{ k.boss_name|e }}')">
+                            <i class="fas fa-users"></i> 出勤
+                        </button>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
@@ -60,6 +71,18 @@
                 <input type="text" name="raid_leader" class="form-input" placeholder="誰開的團">
             </div>
             <div class="form-group">
+                <label>參與成員</label>
+                <div class="member-picker" id="addKillMembers">
+                    {% for m in members %}
+                    <label class="member-chip">
+                        <input type="checkbox" value="{{ m.id }}">
+                        <span>{{ m.name }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+                <small class="form-hint">勾選有參與這次擊殺的成員</small>
+            </div>
+            <div class="form-group">
                 <label>備註</label>
                 <textarea name="notes" class="form-input" rows="2" placeholder="其他資訊..."></textarea>
             </div>
@@ -76,6 +99,32 @@
             <button class="modal-close" onclick="closeModal('killDetailModal')">&times;</button>
         </div>
         <div id="killDetailBody" class="modal-body"></div>
+    </div>
+</div>
+
+<!-- Edit Kill Modal -->
+<div id="editKillModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-pen"></i> 編輯BOSS記錄</h3>
+            <button class="modal-close" onclick="closeModal('editKillModal')">&times;</button>
+        </div>
+        <form id="editKillForm" class="form">
+            <input type="hidden" id="editKillId">
+            <div class="form-group">
+                <label>BOSS名稱 *</label>
+                <input type="text" id="editKillName" required class="form-input">
+            </div>
+            <div class="form-group">
+                <label>團長</label>
+                <input type="text" id="editKillLeader" class="form-input">
+            </div>
+            <div class="form-group">
+                <label>備註</label>
+                <textarea id="editKillNotes" class="form-input" rows="2"></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> 儲存修改</button>
+        </form>
     </div>
 </div>
 
@@ -113,8 +162,59 @@
         </form>
     </div>
 </div>
+
+<!-- Participants Modal -->
+<div id="participantsModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-users"></i> 管理出勤成員 - <span id="partBossName"></span></h3>
+            <button class="modal-close" onclick="closeModal('participantsModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="member-picker" id="participantsList">
+                <!-- Filled by JS -->
+            </div>
+            <div class="form-actions" style="margin-top:16px">
+                <button class="btn btn-primary" onclick="saveParticipants()">
+                    <i class="fas fa-save"></i> 儲存出勤記錄
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 {% block scripts %}
+<style>
+.member-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    max-height: 300px;
+    overflow-y: auto;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+.member-chip {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    background: #f3f4f6;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+    user-select: none;
+}
+.member-chip:has(input:checked) {
+    background: var(--primary-light);
+    color: var(--primary-dark);
+    border: 1px solid var(--primary);
+}
+.member-chip input { display: none; }
+.btn-info { background: var(--info); color: white; border-color: var(--info); }
+</style>
 <script>
 let currentKillId = null;
 
@@ -125,7 +225,17 @@ document.getElementById('addKillForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const data = Object.fromEntries(fd.entries());
-    await apiCall('/api/team/{{ team.id }}/boss/kill', 'POST', data);
+    
+    const r = await apiCall('/api/team/{{ team.id }}/boss/kill', 'POST', data);
+    const killId = r.kill_id;
+    
+    // Save participants
+    const checked = document.querySelectorAll('#addKillMembers input:checked');
+    const memberIds = Array.from(checked).map(cb => parseInt(cb.value));
+    if (memberIds.length > 0) {
+        await apiCall('/api/team/{{ team.id }}/boss/' + killId + '/participants', 'POST', { member_ids: memberIds });
+    }
+    
     showToast('記錄成功！已自動建立分鑽單');
     location.reload();
 });
@@ -149,25 +259,110 @@ async function viewKill(killId) {
     const data = await apiCall('/api/team/{{ team.id }}/boss/' + killId);
     const k = data.kill;
     document.getElementById('detailBossName').textContent = k.boss_name;
-    let html = `<p><strong>擊殺時間:</strong> ${k.kill_time}</p>
-                <p><strong>團長:</strong> ${k.raid_leader || '-'}</p>
-                <p><strong>備註:</strong> ${k.notes || '-'}</p>
-                <hr><h4>掉落物品 (${data.items.length})</h4>`;
-    if (data.items.length) {
-        html += `<table class="table"><thead><tr><th>物品</th><th>數量</th><th>價值</th><th>分配方式</th><th>得主</th></tr></thead><tbody>`;
-        for (const item of data.items) {
-            html += `<tr><td>${item.item_name}</td><td>${item.item_quantity}</td><td>${item.item_value}</td><td>${item.distribution_method}</td><td>${item.winner_name || '-'}</td></tr>`;
-        }
-        html += `</tbody></table>`;
+    
+    // Participants
+    let partHtml = '';
+    if (data.participants && data.participants.length) {
+        partHtml = data.participants.map(p => 
+            `<span class="member-chip" style="background:var(--primary-light);color:var(--primary-dark);border:1px solid var(--primary)">
+                <i class="fas fa-check-circle" style="color:var(--primary)"></i> ${p.member_name}
+            </span>`
+        ).join('');
     } else {
-        html += `<div class="empty-state"><p>還沒有掉落記錄</p></div>`;
+        partHtml = '<span style="color:var(--text-secondary)">無記錄</span>';
     }
+    
+    // Items
+    let itemsHtml = '';
+    if (data.items.length) {
+        itemsHtml = `<table class="table"><thead><tr><th>物品</th><th>數量</th><th>價值</th><th>分配方式</th><th>得主</th></tr></thead><tbody>`;
+        for (const item of data.items) {
+            itemsHtml += `<tr><td>${item.item_name}</td><td>${item.item_quantity}</td><td>${item.item_value}</td><td>${item.distribution_method}</td><td>${item.winner_name || '-'}</td></tr>`;
+        }
+        itemsHtml += `</tbody></table>`;
+    } else {
+        itemsHtml = `<div class="empty-state"><p>還沒有掉落記錄</p></div>`;
+    }
+    
+    let html = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+            <div><strong>擊殺時間:</strong> ${k.kill_time}</div>
+            <div><strong>團長:</strong> ${k.raid_leader || '-'}</div>
+        </div>
+        <div style="margin-bottom:8px"><strong>備註:</strong> ${k.notes || '-'}</div>
+        <div style="margin-bottom:16px">
+            <strong>參與成員 (${data.participants ? data.participants.length : 0})：</strong><br>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px">${partHtml}</div>
+        </div>
+        <hr>
+        <h4 style="margin:12px 0">掉落物品 (${data.items.length})</h4>
+        ${itemsHtml}
+    `;
     document.getElementById('killDetailBody').innerHTML = html;
     document.getElementById('killDetailModal').classList.add('show');
+}
+
+function editKill(killId) {
+    apiCall('/api/team/{{ team.id }}/boss/' + killId).then(data => {
+        const k = data.kill;
+        document.getElementById('editKillId').value = killId;
+        document.getElementById('editKillName').value = k.boss_name;
+        document.getElementById('editKillLeader').value = k.raid_leader || '';
+        document.getElementById('editKillNotes').value = k.notes || '';
+        document.getElementById('editKillModal').classList.add('show');
+    });
+}
+document.getElementById('editKillForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const killId = document.getElementById('editKillId').value;
+    const data = {
+        boss_name: document.getElementById('editKillName').value,
+        raid_leader: document.getElementById('editKillLeader').value,
+        notes: document.getElementById('editKillNotes').value
+    };
+    await apiCall('/api/team/{{ team.id }}/boss/' + killId, 'PUT', data);
+    showToast('修改已儲存');
+    location.reload();
+});
+
+function manageParticipants(killId, bossName) {
+    currentKillId = killId;
+    document.getElementById('partBossName').textContent = bossName;
+    
+    apiCall('/api/team/{{ team.id }}/boss/' + killId + '/participants').then(data => {
+        const participantIds = data.participants.map(p => p.member_id);
+        let html = '';
+        for (const m of data.all_members) {
+            const checked = participantIds.includes(m.id) ? 'checked' : '';
+            html += `<label class="member-chip">
+                <input type="checkbox" value="${m.id}" ${checked}>
+                <span>${m.name}</span>
+            </label>`;
+        }
+        document.getElementById('participantsList').innerHTML = html;
+        document.getElementById('participantsModal').classList.add('show');
+    });
+}
+
+async function saveParticipants() {
+    const checked = document.querySelectorAll('#participantsList input:checked');
+    const memberIds = Array.from(checked).map(cb => parseInt(cb.value));
+    await apiCall('/api/team/{{ team.id }}/boss/' + currentKillId + '/participants', 'POST', { member_ids: memberIds });
+    showToast('出勤記錄已更新！');
+    closeModal('participantsModal');
 }
 
 function closeModal(id) {
     document.getElementById(id).classList.remove('show');
 }
+
+// If not admin, hide admin-only buttons
+{% if not current_member or current_member.role not in ('leader', 'accountant') %}
+document.querySelectorAll('.btn-info, .btn-primary[onclick*="addLoot"]').forEach(el => {
+    if (el.textContent.includes('出勤') || el.textContent.includes('掉落')) {
+        el.style.display = 'none';
+    }
+});
+{% endif %}
 </script>
 {% endblock %}

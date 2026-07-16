@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 from models import get_db, init_db, init_demo_data
+from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import json
 
@@ -44,6 +45,48 @@ def log_transaction(team_id, member_id, type_, amount, balance_after, descriptio
         db.commit()
         db.close()
 
+
+# ==================== Auth Helpers ====================
+from functools import wraps
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if 'member_id' not in session:
+            return redirect(url_for('login_page', next=request.path))
+        return f(*args, **kwargs)
+    return decorated
+
+def admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if 'member_id' not in session:
+            return redirect(url_for('login_page', next=request.path))
+        member_id = session['member_id']
+        db = get_db()
+        member = db.execute("SELECT role FROM members WHERE id=?", [member_id]).fetchone()
+        db.close()
+        if not member or member['role'] not in ('leader', 'accountant'):
+            return jsonify({'error': '需要管理員或會計權限'}), 403
+        return f(*args, **kwargs)
+    return decorated
+
+def get_current_member():
+    if 'member_id' in session:
+        db = get_db()
+        m = db.execute("SELECT * FROM members WHERE id=?", [session['member_id']]).fetchone()
+        db.close()
+        return dict(m) if m else None
+    return None
+
+def is_admin(team_id=None):
+    m = get_current_member()
+    if not m:
+        return False
+    if team_id and m['team_id'] != team_id:
+        return False
+    return m['role'] in ('leader', 'accountant')
+
 # ==================== Routes ====================
 
 @app.route('/')
@@ -53,11 +96,88 @@ def index():
     db.close()
     if not teams:
         return redirect(url_for('create_team_page'))
-    return render_template('index.html', teams=[dict(t) for t in teams])
+    return render_template('index.html', teams=[dict(t) for t in teams], current_member=get_current_member())
+
+
+@app.route('/login')
+def login_page():
+    db = get_db()
+    teams_list = db.execute("SELECT id, name FROM teams WHERE is_active=1").fetchall()
+    db.close()
+    return render_template('login.html', current_member=get_current_member(), teams=[dict(t) for t in teams_list])
+
+@app.route('/api/login', methods=['POST'])
+def api_login():
+    data = request.json
+    name = data.get('name', '').strip()
+    password = data.get('password', '')
+    team_id = data.get('team_id')
+    if not name:
+        return jsonify({'error': '請輸入名稱'}), 400
+    db = get_db()
+    if team_id:
+        member = db.execute("SELECT * FROM members WHERE name=? AND team_id=? AND is_active=1", [name, team_id]).fetchone()
+    else:
+        member = db.execute("SELECT * FROM members WHERE name=? AND is_active=1", [name]).fetchone()
+    if not member:
+        db.close()
+        return jsonify({'error': '用戶不存在'}), 404
+    # Check password
+    pw = member['password_hash'] or ''
+    if pw and not check_password_hash(pw, password):
+        # Legacy mode: if password is set but wrong
+        if password == pw:  # Allow plain text fallback for migration
+            pass
+        else:
+            db.close()
+            return jsonify({'error': '密碼錯誤'}), 401
+    elif pw and not check_password_hash(pw, password):
+        db.close()
+        return jsonify({'error': '密碼錯誤'}), 401
+    session['member_id'] = member['id']
+    session['team_id'] = member['team_id']
+    db.close()
+    return jsonify({'success': True, 'member': dict(member), 'team_id': member['team_id']})
+
+@app.route('/api/register', methods=['POST'])
+def api_register():
+    data = request.json
+    team_id = data.get('team_id')
+    name = data.get('name', '').strip()
+    password = data.get('password', '')
+    if not name or not team_id:
+        return jsonify({'error': '請填寫完整資訊'}), 400
+    db = get_db()
+    # Check if name exists in team
+    existing = db.execute("SELECT id FROM members WHERE name=? AND team_id=? AND is_active=1", [name, team_id]).fetchone()
+    if existing:
+        db.close()
+        return jsonify({'error': '該名稱已在團隊中'}), 400
+    # Check team exists
+    team = db.execute("SELECT id FROM teams WHERE id=? AND is_active=1", [team_id]).fetchone()
+    if not team:
+        db.close()
+        return jsonify({'error': '團隊不存在'}), 404
+    # Create member
+    pw_hash = generate_password_hash(password) if password else ''
+    cur = db.execute("INSERT INTO members (team_id, name, role, password_hash) VALUES (?,?,?,?)",
+                   [team_id, name, 'member', pw_hash])
+    member_id = cur.lastrowid
+    db.execute("INSERT INTO wallets (member_id, balance) VALUES (?,0)", [member_id])
+    db.commit()
+    db.close()
+    session['member_id'] = member_id
+    session['team_id'] = team_id
+    return jsonify({'success': True, 'member_id': member_id, 'team_id': team_id})
+
+@app.route('/api/logout', methods=['POST'])
+def api_logout():
+    session.clear()
+    return jsonify({'success': True})
 
 @app.route('/team/create', methods=['GET'])
 def create_team_page():
-    return render_template('team_create.html')
+    return render_template('team_create.html', current_member=get_current_member())
 
 @app.route('/api/team/create', methods=['POST'])
 def api_create_team():
@@ -112,8 +232,9 @@ def team_dashboard(team_id):
     ).fetchall()
 
     db.close()
+    current = get_current_member()
     return render_template('dashboard.html',
-                         team=team, members=members,
+                         team=team, members=members, current_member=current,
                          total_kills=total_kills, total_orders=total_orders,
                          total_dkp=total_dkp, fund=fund,
                          recent_kills=[dict(r) for r in recent_kills],
@@ -170,13 +291,17 @@ def api_delete_member(team_id, member_id):
 def boss_page(team_id):
     team = dict(get_team(team_id))
     members = get_members(team_id)
+    current = get_current_member()
     db = get_db()
     kills = db.execute(
-        "SELECT bk.*, (SELECT COUNT(*) FROM loot_items WHERE kill_id=bk.id) as loot_count FROM boss_kills bk WHERE bk.team_id=? ORDER BY bk.kill_time DESC",
+        """SELECT bk.*, 
+           (SELECT COUNT(*) FROM loot_items WHERE kill_id=bk.id) as loot_count,
+           (SELECT COUNT(*) FROM boss_participants WHERE kill_id=bk.id) as participant_count
+           FROM boss_kills bk WHERE bk.team_id=? ORDER BY bk.kill_time DESC""",
         [team_id]
     ).fetchall()
     db.close()
-    return render_template('boss.html', team=team, members=members, kills=[dict(k) for k in kills])
+    return render_template('boss.html', team=team, members=members, kills=[dict(k) for k in kills], current_member=current)
 
 @app.route('/api/team/<int:team_id>/boss/kill', methods=['POST'])
 def api_create_kill(team_id):
@@ -204,8 +329,18 @@ def api_get_kill(team_id, kill_id):
         "SELECT li.*, m.name as winner_name FROM loot_items li LEFT JOIN members m ON li.winner_id=m.id WHERE li.kill_id=? ORDER BY li.id",
         [kill_id]
     ).fetchall()
+    participants = db.execute(
+        "SELECT bp.*, m.name as member_name FROM boss_participants bp JOIN members m ON bp.member_id=m.id WHERE bp.kill_id=?",
+        [kill_id]
+    ).fetchall()
+    all_members = db.execute("SELECT id, name FROM members WHERE team_id=? AND is_active=1 ORDER BY name", [team_id]).fetchall()
     db.close()
-    return jsonify({'kill': dict(kill), 'items': [dict(i) for i in items]})
+    return jsonify({
+        'kill': dict(kill),
+        'items': [dict(i) for i in items],
+        'participants': [dict(p) for p in participants],
+        'all_members': [dict(m) for m in all_members]
+    })
 
 @app.route('/api/team/<int:team_id>/boss/<int:kill_id>/loot', methods=['POST'])
 def api_add_loot(team_id, kill_id):
@@ -228,6 +363,91 @@ def api_delete_loot(team_id, kill_id, item_id):
     db.close()
     return jsonify({'success': True})
 
+
+@app.route('/api/team/<int:team_id>/boss/<int:kill_id>/participants', methods=['GET'])
+def api_get_participants(team_id, kill_id):
+    db = get_db()
+    participants = db.execute(
+        "SELECT bp.*, m.name as member_name FROM boss_participants bp JOIN members m ON bp.member_id=m.id WHERE bp.kill_id=?",
+        [kill_id]
+    ).fetchall()
+    # Also return all active members for selection
+    all_members = db.execute("SELECT id, name FROM members WHERE team_id=? AND is_active=1 ORDER BY name", [team_id]).fetchall()
+    db.close()
+    return jsonify({
+        'participants': [dict(p) for p in participants],
+        'all_members': [dict(m) for m in all_members]
+    })
+
+@app.route('/api/team/<int:team_id>/boss/<int:kill_id>/participants', methods=['POST'])
+def api_set_participants(team_id, kill_id):
+    if not is_admin(team_id):
+        return jsonify({'error': '權限不足'}), 403
+    data = request.json
+    member_ids = data.get('member_ids', [])
+    db = get_db()
+    # Clear existing
+    db.execute("DELETE FROM boss_participants WHERE kill_id=?", [kill_id])
+    # Add new
+    for mid in member_ids:
+        db.execute("INSERT OR IGNORE INTO boss_participants (kill_id, member_id) VALUES (?,?)", [kill_id, mid])
+    db.commit()
+    db.close()
+    return jsonify({'success': True})
+
+@app.route('/api/team/<int:team_id>/boss/<int:kill_id>', methods=['PUT'])
+def api_update_kill(team_id, kill_id):
+    if not is_admin(team_id):
+        return jsonify({'error': '權限不足'}), 403
+    data = request.json
+    db = get_db()
+    db.execute(
+        "UPDATE boss_kills SET boss_name=?, raid_leader=?, notes=? WHERE id=? AND team_id=?",
+        [data.get('boss_name'), data.get('raid_leader', ''), data.get('notes', ''), kill_id, team_id]
+    )
+    db.commit()
+    db.close()
+    return jsonify({'success': True})
+
+@app.route('/api/team/<int:team_id>/loot/<int:item_id>', methods=['PUT'])
+def api_update_loot(team_id, item_id):
+    if not is_admin(team_id):
+        return jsonify({'error': '權限不足'}), 403
+    data = request.json
+    db = get_db()
+    db.execute(
+        "UPDATE loot_items SET item_name=?, item_quantity=?, item_value=?, distribution_method=?, winner_id=? WHERE id=?",
+        [data.get('item_name'), data.get('quantity', 1), data.get('value', 0),
+         data.get('method', 'split'), data.get('winner_id'), item_id]
+    )
+    db.commit()
+    db.close()
+    return jsonify({'success': True})
+
+@app.route('/api/team/<int:team_id>/dkp/<int:dkp_id>', methods=['PUT'])
+def api_update_dkp(team_id, dkp_id):
+    if not is_admin(team_id):
+        return jsonify({'error': '權限不足'}), 403
+    data = request.json
+    db = get_db()
+    db.execute(
+        "UPDATE dkp_records SET dkp=?, reason=? WHERE id=? AND team_id=?",
+        [data.get('dkp'), data.get('reason', ''), dkp_id, team_id]
+    )
+    db.commit()
+    db.close()
+    return jsonify({'success': True})
+
+@app.route('/api/team/<int:team_id>/dkp/<int:dkp_id>', methods=['DELETE'])
+def api_delete_dkp(team_id, dkp_id):
+    if not is_admin(team_id):
+        return jsonify({'error': '權限不足'}), 403
+    db = get_db()
+    db.execute("DELETE FROM dkp_records WHERE id=? AND team_id=?", [dkp_id, team_id])
+    db.commit()
+    db.close()
+    return jsonify({'success': True})
+
 # ==================== Split Orders ====================
 
 @app.route('/team/<int:team_id>/orders')
@@ -245,7 +465,8 @@ def orders_page(team_id):
         [team_id]
     ).fetchall()
     db.close()
-    return render_template('orders.html', team=team, members=members, orders=[dict(o) for o in orders])
+    current = get_current_member()
+    return render_template('orders.html', team=team, members=members, orders=[dict(o) for o in orders], current_member=current)
 
 @app.route('/api/team/<int:team_id>/orders/<int:order_id>', methods=['GET'])
 def api_get_order(team_id, order_id):
@@ -345,7 +566,8 @@ def wallet_page(team_id):
     fund = db.execute("SELECT * FROM team_fund WHERE team_id=?", [team_id]).fetchone()
     fund = dict(fund) if fund else {'balance': 0, 'total_income': 0, 'total_expense': 0}
     db.close()
-    return render_template('wallet.html', team=team, wallets=wallets_data, fund=fund)
+    current = get_current_member()
+    return render_template('wallet.html', team=team, wallets=wallets_data, fund=fund, current_member=current)
 
 @app.route('/api/team/<int:team_id>/wallet/deposit', methods=['POST'])
 def api_wallet_deposit(team_id):
@@ -419,7 +641,8 @@ def auction_page(team_id):
         [team_id]
     ).fetchall()
     db.close()
-    return render_template('auction.html', team=team, members=members, auctions=[dict(a) for a in auctions])
+    current = get_current_member()
+    return render_template('auction.html', team=team, members=members, auctions=[dict(a) for a in auctions], current_member=current)
 
 @app.route('/api/team/<int:team_id>/auction/create', methods=['POST'])
 def api_create_auction(team_id):
@@ -523,7 +746,8 @@ def dkp_page(team_id):
         [team_id]
     ).fetchall()
     db.close()
-    return render_template('dkp.html', team=team, dkp_summary=dkp_summary, histories=[dict(h) for h in histories])
+    current = get_current_member()
+    return render_template('dkp.html', team=team, dkp_summary=dkp_summary, histories=[dict(h) for h in histories], current_member=current)
 
 @app.route('/api/team/<int:team_id>/dkp/add', methods=['POST'])
 def api_add_dkp(team_id):
@@ -590,7 +814,8 @@ def settings_page(team_id):
     settings_list = db.execute("SELECT * FROM settings WHERE team_id=?", [team_id]).fetchall()
     settings_dict = {s['setting_key']: s['setting_value'] for s in settings_list}
     db.close()
-    return render_template('settings.html', team=team, settings=settings_dict)
+    current = get_current_member()
+    return render_template('settings.html', team=team, settings=settings_dict, current_member=current)
 
 @app.route('/api/team/<int:team_id>/settings', methods=['POST'])
 def api_update_settings(team_id):
@@ -631,6 +856,7 @@ def reports_page(team_id):
     ).fetchall()
 
     db.close()
+    current = get_current_member()
     return render_template('reports.html', team=team,
                          monthly_kills=[dict(r) for r in monthly_kills],
                          member_ranking=[dict(r) for r in member_ranking])

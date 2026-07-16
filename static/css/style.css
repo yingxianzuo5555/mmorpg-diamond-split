@@ -575,3 +575,25 @@ body {
     .auction-grid { grid-template-columns: 1fr; }
     .info-grid { grid-template-columns: 1fr; }
 }
+
+.nav-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+.nav-user {
+    color: rgba(255,255,255,0.85);
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.nav-logout-btn {
+    background: rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.8);
+    border-color: transparent;
+}
+.nav-logout-btn:hover {
+    background: rgba(255,255,255,0.2);
+}
